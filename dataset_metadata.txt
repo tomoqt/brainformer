@@ -1,0 +1,2 @@
+Input shape: torch.Size([5000, 70, 256])
+Output shape: torch.Size([5000, 300, 256])

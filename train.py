@@ -40,7 +40,7 @@ def parse_args():
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
-    parser.add_argument('--lr', type=float, default=1e-4, help='Learning rate')
+    parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
     parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
     parser.add_argument('--beta1', type=float, default=0.9, help='Beta1 for Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.99, help='Beta2 for Adam optimizer')

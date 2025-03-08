@@ -16,6 +16,33 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim, base=10000):
+        super().__init__()
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self.seq_len_cached = None
+        self.cos_cached = None
+        self.sin_cached = None
+
+    def forward(self, x, seq_len=None):
+        if seq_len != self.seq_len_cached:
+            self.seq_len_cached = seq_len
+            t = torch.arange(seq_len, device=x.device)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+            self.cos_cached = emb.cos()
+            self.sin_cached = emb.sin()
+        return self.cos_cached, self.sin_cached
+
+def rotate_half(x):
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), -1)
+
+def apply_rotary_pos_emb(q, k, cos, sin):
+    cos, sin = cos[..., : q.shape[-2], :], sin[..., : q.shape[-2], :]
+    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+
 class LayerNorm(nn.Module):
     """ LayerNorm but with an optional bias. PyTorch doesn't support simply bias=False """
 
@@ -42,6 +69,12 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        
+        # Initialize rotary embeddings
+        self.head_dim = config.n_embd // config.n_head
+        self.rotary_ndims = int(self.head_dim * 0.5)  # Apply to half of the dimensions
+        self.rotary_emb = RotaryEmbedding(self.rotary_ndims)
+        
         # flash attention make GPU go brrrrr but support is only in PyTorch >= 2.0
         self.flash = hasattr(torch.nn.functional, 'scaled_dot_product_attention')
         if not self.flash:
@@ -58,6 +91,20 @@ class CausalSelfAttention(nn.Module):
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
+
+        # Apply rotary embeddings to part of q and k
+        q_rot, q_pass = q[..., :self.rotary_ndims], q[..., self.rotary_ndims:]
+        k_rot, k_pass = k[..., :self.rotary_ndims], k[..., self.rotary_ndims:]
+        
+        # Get positional embeddings
+        cos, sin = self.rotary_emb(q_rot, seq_len=T)
+        
+        # Apply rotary embeddings
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        
+        # Recombine with pass-through parts
+        q = torch.cat((q_rot, q_pass), dim=-1)
+        k = torch.cat((k_rot, k_pass), dim=-1)
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:

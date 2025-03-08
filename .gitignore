@@ -176,3 +176,4 @@ data/synthetic/synthetic_dataset/
 data/synthetic/example_data/
 checkpoints/
 /wandb
+eeg2meg_data/

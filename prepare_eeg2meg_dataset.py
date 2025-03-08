@@ -6,6 +6,7 @@ import argparse
 from datasets import load_dataset
 from tqdm import tqdm
 from typing import Tuple, Dict, Optional
+from scipy import signal
 
 def load_eeg2megset(
     cache_dir: Optional[str] = None,
@@ -35,7 +36,7 @@ def process_dataset(
     expected_seq_len: int = 771
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Process the EEG2MEG dataset by converting integers to floats and ensuring correct shapes.
+    Process the EEG2MEG dataset assuming data is a 2D array with rows as channels.
     
     Args:
         dataset: The loaded dataset
@@ -46,98 +47,81 @@ def process_dataset(
     """
     num_samples = len(dataset)
     
-    # Determine input and output channels from the first sample
-    eeg_channels = len(dataset[0]['eeg']) if isinstance(dataset[0]['eeg'], list) else 1
-    meg_channels = len(dataset[0]['meg']) if isinstance(dataset[0]['meg'], list) else 1
-    
-    # Create empty tensors to store the processed data
+    # Create empty lists to store the processed data
     inputs = []
     outputs = []
     
     # Process each sample
     for i in tqdm(range(num_samples), desc="Processing dataset", ncols=100):
-        # Get EEG data (input)
+        # Get EEG data (input) and MEG data (output)
         eeg = dataset[i]['eeg']
-        # Get MEG data (output)
         meg = dataset[i]['meg']
         
         # Convert to float tensors
         eeg_tensor = torch.tensor(eeg, dtype=torch.float32)
         meg_tensor = torch.tensor(meg, dtype=torch.float32)
         
-        # Check shapes and reshape if necessary
-        if eeg_tensor.ndim == 1 and eeg_tensor.shape[0] != expected_seq_len:
-            print(f"Warning: Sample {i} EEG has unexpected shape {eeg_tensor.shape}, expected length {expected_seq_len}")
-            # Pad or truncate to expected length
-            if eeg_tensor.shape[0] < expected_seq_len:
-                eeg_tensor = torch.nn.functional.pad(eeg_tensor, (0, expected_seq_len - eeg_tensor.shape[0]))
-            else:
-                eeg_tensor = eeg_tensor[:expected_seq_len]
+        # Print information about the first few samples for debugging
+        if i < 3:
+            print(f"Sample {i} EEG shape: {eeg_tensor.shape}, dtype: {eeg_tensor.dtype}")
+            print(f"Sample {i} EEG min: {eeg_tensor.min()}, max: {eeg_tensor.max()}, mean: {eeg_tensor.mean()}")
+            print(f"Sample {i} MEG shape: {meg_tensor.shape}, dtype: {meg_tensor.dtype}")
+            print(f"Sample {i} MEG min: {meg_tensor.min()}, max: {meg_tensor.max()}, mean: {meg_tensor.mean()}")
         
-        if meg_tensor.ndim == 1 and meg_tensor.shape[0] != expected_seq_len:
-            print(f"Warning: Sample {i} MEG has unexpected shape {meg_tensor.shape}, expected length {expected_seq_len}")
-            # Pad or truncate to expected length
-            if meg_tensor.shape[0] < expected_seq_len:
-                meg_tensor = torch.nn.functional.pad(meg_tensor, (0, expected_seq_len - meg_tensor.shape[0]))
-            else:
-                meg_tensor = meg_tensor[:expected_seq_len]
-        
-        # Handle multi-channel data if needed
-        if eeg_tensor.ndim > 1:
-            # If data is already multi-channel, just ensure the sequence dim is correct
-            if eeg_tensor.shape[-1] != expected_seq_len:
-                eeg_tensor = eeg_tensor[..., :expected_seq_len]
-        else:
-            # If single channel, reshape to [1, seq_len]
+        # Ensure data is shaped as [channels, sequence_length]
+        # If 1D, reshape to [1, sequence_length]
+        if eeg_tensor.ndim == 1:
             eeg_tensor = eeg_tensor.unsqueeze(0)
         
-        if meg_tensor.ndim > 1:
-            if meg_tensor.shape[-1] != expected_seq_len:
-                meg_tensor = meg_tensor[..., :expected_seq_len]
-        else:
+        if meg_tensor.ndim == 1:
             meg_tensor = meg_tensor.unsqueeze(0)
+        
+        # Normalize EEG data to reduce the sigmoid effect 
+        # Apply channel-wise z-score normalization
+        for ch in range(eeg_tensor.shape[0]):
+            channel = eeg_tensor[ch]
+            mean = channel.mean()
+            std = channel.std()
+            if std > 0:  # Avoid division by zero
+                eeg_tensor[ch] = (channel - mean) / std
+        
+        # Ensure the sequence length is correct
+        if eeg_tensor.shape[1] != expected_seq_len:
+            if eeg_tensor.shape[1] < expected_seq_len:
+                # Pad to expected length
+                padding = (0, expected_seq_len - eeg_tensor.shape[1])
+                eeg_tensor = torch.nn.functional.pad(eeg_tensor, padding)
+            else:
+                # Truncate to expected length
+                eeg_tensor = eeg_tensor[:, :expected_seq_len]
+        
+        if meg_tensor.shape[1] != expected_seq_len:
+            if meg_tensor.shape[1] < expected_seq_len:
+                # Pad to expected length
+                padding = (0, expected_seq_len - meg_tensor.shape[1])
+                meg_tensor = torch.nn.functional.pad(meg_tensor, padding)
+            else:
+                # Truncate to expected length
+                meg_tensor = meg_tensor[:, :expected_seq_len]
+        
+        # Apply high-pass filtering to EEG to remove slow drifts (common cause of sigmoid-like patterns)
+        # Simple first-order difference as a basic high-pass filter
+        if eeg_tensor.shape[1] > 1:  # Only if we have more than one time point
+            eeg_filtered = torch.zeros_like(eeg_tensor)
+            eeg_filtered[:, 1:] = eeg_tensor[:, 1:] - eeg_tensor[:, :-1]
+            # Rescale the filtered signal to have a similar range as the original
+            for ch in range(eeg_filtered.shape[0]):
+                if eeg_filtered[ch].std() > 0:
+                    scale_factor = eeg_tensor[ch].std() / eeg_filtered[ch].std()
+                    eeg_filtered[ch] = eeg_filtered[ch] * scale_factor
+            eeg_tensor = eeg_filtered
         
         inputs.append(eeg_tensor)
         outputs.append(meg_tensor)
     
-    # Stack all samples
-    try:
-        inputs_tensor = torch.stack(inputs)
-        outputs_tensor = torch.stack(outputs)
-    except RuntimeError as e:
-        print(f"Error stacking tensors: {e}")
-        print(f"Input shapes: {[x.shape for x in inputs[:5]]} (showing first 5)")
-        print(f"Output shapes: {[x.shape for x in outputs[:5]]} (showing first 5)")
-        # Try to standardize shapes
-        fixed_inputs = []
-        fixed_outputs = []
-        for i, (inp, out) in enumerate(zip(inputs, outputs)):
-            if inp.shape[0] != inputs[0].shape[0]:
-                if inp.shape[0] < inputs[0].shape[0]:
-                    # Pad with zeros
-                    padded = torch.zeros(inputs[0].shape[0], inp.shape[1], dtype=inp.dtype)
-                    padded[:inp.shape[0]] = inp
-                    fixed_inputs.append(padded)
-                else:
-                    # Truncate
-                    fixed_inputs.append(inp[:inputs[0].shape[0]])
-            else:
-                fixed_inputs.append(inp)
-                
-            if out.shape[0] != outputs[0].shape[0]:
-                if out.shape[0] < outputs[0].shape[0]:
-                    # Pad with zeros
-                    padded = torch.zeros(outputs[0].shape[0], out.shape[1], dtype=out.dtype)
-                    padded[:out.shape[0]] = out
-                    fixed_outputs.append(padded)
-                else:
-                    # Truncate
-                    fixed_outputs.append(out[:outputs[0].shape[0]])
-            else:
-                fixed_outputs.append(out)
-                
-        inputs_tensor = torch.stack(fixed_inputs)
-        outputs_tensor = torch.stack(fixed_outputs)
+    # Stack all samples into batch dimension
+    inputs_tensor = torch.stack(inputs)  # [batch, channels, sequence]
+    outputs_tensor = torch.stack(outputs)  # [batch, channels, sequence]
     
     print(f"Processed data shapes: Inputs {inputs_tensor.shape}, Outputs {outputs_tensor.shape}")
     return inputs_tensor, outputs_tensor
@@ -168,27 +152,72 @@ def save_dataset(
     
     print("Creating visualization sample...")
     # Save a sample plot for visualization
-    sample_idx = np.random.randint(0, inputs.shape[0])
+    sample_idx = 0  # Using the first sample for consistency
     
-    plt.figure(figsize=(15, 10))
+    # Create a comprehensive visualization
+    plt.figure(figsize=(15, 15))
     
-    # Plot input channels (up to 10 for clarity)
+    # Plot input channels (EEG)
+    plt.subplot(3, 1, 1)
+    plt.title("Input Signal (EEG)", fontsize=14)
     num_input_channels_to_plot = min(10, inputs.shape[1])
     for c in range(num_input_channels_to_plot):
-        plt.subplot(2, num_input_channels_to_plot, c + 1)
-        plt.plot(inputs[sample_idx, c].numpy())
-        plt.title(f"EEG Channel {c+1}")
+        plt.plot(inputs[sample_idx, c].numpy(), label=f"Ch {c+1}")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Amplitude")
+    plt.legend(loc='upper right', ncol=2)
+    plt.grid(True, alpha=0.3)
     
-    # Plot output channels (up to 10 for clarity)
+    # Plot output channels (MEG)
+    plt.subplot(3, 1, 2)
+    plt.title("Target Output (MEG)", fontsize=14)
     num_output_channels_to_plot = min(10, outputs.shape[1])
     for c in range(num_output_channels_to_plot):
-        plt.subplot(2, num_output_channels_to_plot, 
-                   num_input_channels_to_plot + c + 1)
-        plt.plot(outputs[sample_idx, c].numpy())
-        plt.title(f"MEG Channel {c+1}")
+        plt.plot(outputs[sample_idx, c].numpy(), label=f"Ch {c+1}")
+    plt.xlabel("Time Steps")
+    plt.ylabel("Amplitude")
+    plt.legend(loc='upper right', ncol=2)
+    plt.grid(True, alpha=0.3)
+    
+    # Add a spectrogram of the EEG input (first channel) to check frequency content
+    plt.subplot(3, 1, 3)
+    plt.title("EEG Channel 1 Spectrogram", fontsize=14)
+    f, t, Sxx = signal.spectrogram(inputs[sample_idx, 0].numpy(), fs=100)  # Assuming 100Hz sampling rate
+    plt.pcolormesh(t, f, 10 * np.log10(Sxx), shading='gouraud')
+    plt.ylabel('Frequency [Hz]')
+    plt.xlabel('Time [sec]')
+    plt.colorbar(label='Power/Frequency (dB/Hz)')
     
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, f"{prefix}_sample_plot.png"))
+    
+    # Create a separate figure for power spectral density analysis
+    plt.figure(figsize=(15, 10))
+    
+    # Plot power spectral density of input channels
+    plt.subplot(2, 1, 1)
+    plt.title("EEG Power Spectral Density", fontsize=14)
+    for c in range(num_input_channels_to_plot):
+        f, Pxx = signal.welch(inputs[sample_idx, c].numpy(), fs=100, nperseg=256)
+        plt.semilogy(f, Pxx, label=f"Ch {c+1}")
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("Power/Frequency [V^2/Hz]")
+    plt.legend(loc='upper right', ncol=2)
+    plt.grid(True, alpha=0.3)
+    
+    # Plot power spectral density of output channels
+    plt.subplot(2, 1, 2)
+    plt.title("MEG Power Spectral Density", fontsize=14)
+    for c in range(num_output_channels_to_plot):
+        f, Pxx = signal.welch(outputs[sample_idx, c].numpy(), fs=100, nperseg=256)
+        plt.semilogy(f, Pxx, label=f"Ch {c+1}")
+    plt.xlabel("Frequency [Hz]")
+    plt.ylabel("Power/Frequency [V^2/Hz]")
+    plt.legend(loc='upper right', ncol=2)
+    plt.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_dir, f"{prefix}_spectral_analysis.png"))
     
     # Save metadata
     with open(os.path.join(save_dir, f"{prefix}_metadata.txt"), "w") as f:
@@ -196,6 +225,8 @@ def save_dataset(
         f.write(f"Output (MEG) shape: {outputs.shape}\n")
         f.write(f"Input type: {inputs.dtype}\n")
         f.write(f"Output type: {outputs.dtype}\n")
+        f.write(f"Input stats - Min: {inputs.min().item()}, Max: {inputs.max().item()}, Mean: {inputs.mean().item()}, Std: {inputs.std().item()}\n")
+        f.write(f"Output stats - Min: {outputs.min().item()}, Max: {outputs.max().item()}, Mean: {outputs.mean().item()}, Std: {outputs.std().item()}\n")
 
 def main():
     parser = argparse.ArgumentParser(description="Prepare EEG2MEG dataset from Hugging Face")

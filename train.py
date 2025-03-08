@@ -65,6 +65,10 @@ def parse_args():
     parser.add_argument('--wandb_watch', type=str, default='gradients', help='Wandb watch mode: gradients, parameters, or all')
     parser.add_argument('--wandb_watch_log_freq', type=int, default=100, help='Frequency of logging gradients and parameters')
     
+    # Torch compile parameters
+    parser.add_argument('--use_compile', action='store_true', default=True, help='Whether to use torch.compile for model acceleration')
+    parser.add_argument('--compile_mode', type=str, default='default', help='Torch compile mode: default, reduce-overhead, or max-autotune')
+    
     return parser.parse_args()
 
 def prepare_data(args):
@@ -190,6 +194,13 @@ def create_model(args):
         decoder_dilations=[1, 1, 1, 1],
         output_channels=args.output_channels
     )
+    
+    # Apply torch.compile if enabled
+    if args.use_compile and hasattr(torch, 'compile'):
+        logger.info(f"Applying torch.compile with mode: {args.compile_mode}")
+        model = torch.compile(model, mode=args.compile_mode)
+    elif args.use_compile and not hasattr(torch, 'compile'):
+        logger.warning("torch.compile is not available in your PyTorch version. Continuing without compilation.")
     
     return model
 

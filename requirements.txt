@@ -4,3 +4,4 @@ matplotlib
 numpy
 wandb
 datasets
+scipy

@@ -51,6 +51,12 @@ def parse_args():
     parser.add_argument('--log_every', type=int, default=10, help='Log training metrics every N batches')
     parser.add_argument('--viz_every', type=int, default=1, help='Visualize sample predictions every N epochs')
     
+    # Optimizer parameters
+    parser.add_argument('--use_muon', action='store_true', default=False, help='Whether to use Muon optimizer for 2D parameters')
+    parser.add_argument('--muon_momentum', type=float, default=0.95, help='Momentum for Muon optimizer')
+    parser.add_argument('--muon_nesterov', action='store_true', default=True, help='Whether to use Nesterov momentum for Muon')
+    parser.add_argument('--muon_ns_steps', type=int, default=5, help='Number of Newton-Schulz iteration steps for Muon')
+    
     # Wandb parameters
     parser.add_argument('--use_wandb', action='store_true', default=True, help='Whether to use Weights & Biases for logging')
     parser.add_argument('--wandb_project', type=str, default='brainformer', help='Wandb project name')
@@ -203,9 +209,18 @@ def train_epoch(model, dataloader, criterion, optimizer, device, args, epoch):
         loss = criterion(outputs, targets)
         
         # Backward pass and optimize
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        if isinstance(optimizer, list):
+            # If we have multiple optimizers (e.g., Muon + AdamW)
+            for opt in optimizer:
+                opt.zero_grad()
+            loss.backward()
+            for opt in optimizer:
+                opt.step()
+        else:
+            # Single optimizer
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
         
         # Update metrics
         epoch_loss += loss.item()
@@ -255,26 +270,29 @@ def save_checkpoint(model, optimizer, epoch, loss, args, is_best=False):
     filename = os.path.join(args.save_dir, f"brainformer_epoch_{epoch+1}.pt")
     
     # Save checkpoint
-    torch.save({
+    checkpoint = {
         'epoch': epoch + 1,
         'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss,
         'args': vars(args)
-    }, filename)
+    }
+    
+    # Handle optimizer state
+    if isinstance(optimizer, list):
+        # If using multiple optimizers (e.g., Muon + AdamW)
+        checkpoint['optimizer_state_dict'] = [opt.state_dict() for opt in optimizer]
+    else:
+        # Single optimizer
+        checkpoint['optimizer_state_dict'] = optimizer.state_dict()
+    
+    torch.save(checkpoint, filename)
     
     logger.info(f"Checkpoint saved to {filename}")
     
     # Save best model if this is the best so far
     if is_best:
         best_filename = os.path.join(args.save_dir, "brainformer_best.pt")
-        torch.save({
-            'epoch': epoch + 1,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss,
-            'args': vars(args)
-        }, best_filename)
+        torch.save(checkpoint, best_filename)
         logger.info(f"Best model saved to {best_filename}")
 
 def plot_training_history(train_losses, val_losses, args):
@@ -397,14 +415,33 @@ def main():
     # Parse command-line arguments
     args = parse_args()
     
+    # Initialize distributed environment if using Muon
+    rank = 0
+    world_size = 1
+    if args.use_muon:
+        # Check if we're in a distributed environment (via torchrun)
+        if "LOCAL_RANK" in os.environ:
+            # Initialize the distributed environment
+            import torch.distributed as dist
+            rank = int(os.environ.get("LOCAL_RANK", 0))
+            world_size = int(os.environ.get("WORLD_SIZE", 1))
+            
+            if not dist.is_initialized():
+                # Initialize the process group
+                dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo")
+                
+            print(f"Initialized distributed environment: rank={rank}, world_size={world_size}")
+    
     # Initialize wandb if enabled
     if args.use_wandb:
-        wandb.init(
-            project=args.wandb_project,
-            entity=args.wandb_entity,
-            name=args.wandb_name,
-            config=vars(args)
-        )
+        # Only initialize wandb on rank 0 when using distributed training
+        if not args.use_muon or rank == 0:
+            wandb.init(
+                project=args.wandb_project,
+                entity=args.wandb_entity,
+                name=args.wandb_name,
+                config=vars(args)
+            )
     
     # Set random seeds for reproducibility
     np.random.seed(42)
@@ -413,7 +450,7 @@ def main():
         torch.cuda.manual_seed_all(42)
     
     # Determine the device to use
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(f'cuda:{rank}' if torch.cuda.is_available() else 'cpu')
     logger.info(f"Using device: {device}")
     
     # Prepare data
@@ -443,7 +480,13 @@ def main():
         weight_decay=args.weight_decay,
         learning_rate=args.lr,
         betas=(args.beta1, args.beta2),
-        device_type='cuda' if torch.cuda.is_available() else 'cpu'
+        device_type='cuda' if torch.cuda.is_available() else 'cpu',
+        use_muon=args.use_muon,
+        muon_momentum=args.muon_momentum,
+        muon_nesterov=args.muon_nesterov,
+        muon_ns_steps=args.muon_ns_steps,
+        rank=rank,
+        world_size=world_size
     )
     
     # Training loop

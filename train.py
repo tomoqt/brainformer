@@ -198,7 +198,7 @@ def create_model(args):
     # Apply torch.compile if enabled
     if args.use_compile and hasattr(torch, 'compile'):
         logger.info(f"Applying torch.compile with mode: {args.compile_mode}")
-        model = torch.compile(model, mode=args.compile_mode)
+        #model = torch.compile(model, mode=args.compile_mode)
     elif args.use_compile and not hasattr(torch, 'compile'):
         logger.warning("torch.compile is not available in your PyTorch version. Continuing without compilation.")
     

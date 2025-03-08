@@ -31,12 +31,12 @@ def parse_args():
     parser.add_argument('--output_file', type=str, default='outputs.pt', help='Filename of output data (default: outputs.pt)')
     
     # Model parameters
-    parser.add_argument('--encoder_hidden_dims', type=str, default='512', help='Comma-separated list of encoder hidden dimensions')
-    parser.add_argument('--decoder_hidden_dims', type=str, default='512', help='Comma-separated list of decoder hidden dimensions')
-    parser.add_argument('--n_layer', type=int, default=8, help='Number of transformer layers')
-    parser.add_argument('--n_head', type=int, default=4, help='Number of attention heads')
-    parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
-    parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate')
+    parser.add_argument('--encoder_hidden_dims', type=str, default='512,512', help='Comma-separated list of encoder hidden dimensions')
+    parser.add_argument('--decoder_hidden_dims', type=str, default='512,512', help='Comma-separated list of decoder hidden dimensions')
+    parser.add_argument('--n_layer', type=int, default=16, help='Number of transformer layers')
+    parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
+    parser.add_argument('--n_embd', type=int, default=1024, help='Embedding dimension')
+    parser.add_argument('--dropout', type=float, default=0.01, help='Dropout rate')
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')

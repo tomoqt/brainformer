@@ -64,7 +64,7 @@ class Conv1DEncoder(nn.Module):
         kernel_sizes=[3, 3, 3, 3],
         dilations=[1, 1, 1, 1],
         output_channels=None,
-        use_mlp=False  # Default to using MLP
+        use_mlp=True  # Default to using MLP
     ):
         super().__init__()
         

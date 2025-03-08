@@ -15,7 +15,7 @@ python train.py \
   --input_channels 70 \
   --output_channels 306 \
   --seq_len 771 \
-  --batch_size 32 \
+  --batch_size 16 \
   --epochs 100 \
   --save_dir checkpoints \
   --save_every 10 \
@@ -24,6 +24,6 @@ python train.py \
   --val_ratio 0.2 \
   --input_file eeg2meg_inputs.pt \
   --output_file eeg2meg_outputs.pt \
-  --wandb_watch=all
+  --wandb_watch=all \
 
 echo "EEG2MEG training completed successfully!" 

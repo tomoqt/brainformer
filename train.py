@@ -31,17 +31,17 @@ def parse_args():
     parser.add_argument('--output_file', type=str, default='outputs.pt', help='Filename of output data (default: outputs.pt)')
     
     # Model parameters
-    parser.add_argument('--encoder_hidden_dims', type=str, default='256,256,256,256', help='Comma-separated list of encoder hidden dimensions')
-    parser.add_argument('--decoder_hidden_dims', type=str, default='256,256,256,256', help='Comma-separated list of decoder hidden dimensions')
+    parser.add_argument('--encoder_hidden_dims', type=str, default='512', help='Comma-separated list of encoder hidden dimensions')
+    parser.add_argument('--decoder_hidden_dims', type=str, default='512', help='Comma-separated list of decoder hidden dimensions')
     parser.add_argument('--n_layer', type=int, default=8, help='Number of transformer layers')
-    parser.add_argument('--n_head', type=int, default=8, help='Number of attention heads')
+    parser.add_argument('--n_head', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
     parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate')
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
-    parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--weight_decay', type=float, default=0.01, help='Weight decay')
+    parser.add_argument('--lr', type=float, default=5e-4, help='Learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0, help='Weight decay')
     parser.add_argument('--beta1', type=float, default=0.9, help='Beta1 for Adam optimizer')
     parser.add_argument('--beta2', type=float, default=0.99, help='Beta2 for Adam optimizer')
     parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
@@ -346,19 +346,37 @@ def visualize_predictions(model, dataloader, device, epoch, args):
         axs[0].set_ylabel('Channel')
         plt.colorbar(im, ax=axs[0])
     
-    # Plot target output (heatmap for many channels)
+    # Plot target output - similar logic as input
     axs[1].set_title('Target Output')
-    im = axs[1].imshow(target_sample.T, aspect='auto', interpolation='none')
-    axs[1].set_xlabel('Time Steps')
-    axs[1].set_ylabel('Channel')
-    plt.colorbar(im, ax=axs[1])
+    if target_sample.shape[1] > 10:
+        # If too many channels, just plot first 10
+        channels_to_plot = min(10, target_sample.shape[1])
+        for i in range(channels_to_plot):
+            axs[1].plot(target_sample[:, i], label=f'Ch {i+1}')
+        axs[1].set_xlabel('Time Steps')
+        axs[1].set_ylabel('Amplitude')
+        axs[1].legend()
+    else:
+        im = axs[1].imshow(target_sample.T, aspect='auto', interpolation='none')
+        axs[1].set_xlabel('Time Steps')
+        axs[1].set_ylabel('Channel')
+        plt.colorbar(im, ax=axs[1])
     
-    # Plot predicted output
+    # Plot predicted output - similar logic as input
     axs[2].set_title('Predicted Output')
-    im = axs[2].imshow(prediction.T, aspect='auto', interpolation='none')
-    axs[2].set_xlabel('Time Steps')
-    axs[2].set_ylabel('Channel')
-    plt.colorbar(im, ax=axs[2])
+    if prediction.shape[1] > 10:
+        # If too many channels, just plot first 10
+        channels_to_plot = min(10, prediction.shape[1])
+        for i in range(channels_to_plot):
+            axs[2].plot(prediction[:, i], label=f'Ch {i+1}')
+        axs[2].set_xlabel('Time Steps')
+        axs[2].set_ylabel('Amplitude')
+        axs[2].legend()
+    else:
+        im = axs[2].imshow(prediction.T, aspect='auto', interpolation='none')
+        axs[2].set_xlabel('Time Steps')
+        axs[2].set_ylabel('Channel')
+        plt.colorbar(im, ax=axs[2])
     
     # Add overall title
     plt.suptitle(f'Sample Visualization - Epoch {epoch+1}', fontsize=16)

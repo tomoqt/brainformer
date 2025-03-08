@@ -37,7 +37,6 @@ torchrun \
   --muon_nesterov \
   --muon_ns_steps 5 \
   --lr 0.001 \
-  --weight_decay 0.1\
-  --no-use_compile
+  --weight_decay 0.1 
 
 echo "EEG2MEG training with Muon optimizer completed successfully!" 

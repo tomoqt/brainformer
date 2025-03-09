@@ -73,6 +73,9 @@ def parse_args():
     parser.add_argument('--use_compile', action='store_true', default=True, help='Whether to use torch.compile for model acceleration')
     parser.add_argument('--compile_mode', type=str, default='default', help='Torch compile mode: default, reduce-overhead, or max-autotune')
     
+    # New parameters
+    parser.add_argument('--train_viz_samples', type=int, default=4, help='Number of training samples to visualize')
+    
     return parser.parse_args()
 
 def prepare_data(args):
@@ -491,6 +494,134 @@ def visualize_predictions(model, dataloader, device, epoch, args):
         plt.close(fig_pred)
         plt.close(fig_diff)
 
+def visualize_training_samples(train_loader, num_samples=4, epoch=0, args=None):
+    """
+    Visualize multiple samples from the training dataset
+    
+    Args:
+        train_loader: Data loader containing training data
+        num_samples: Number of training samples to visualize
+        epoch: Current epoch number (for naming)
+        args: Command line arguments
+    """
+    # Create directory for visualization
+    viz_dir = os.path.join(args.save_dir, 'visualizations', 'training_samples')
+    os.makedirs(viz_dir, exist_ok=True)
+    
+    # Get a batch of data
+    inputs, targets = next(iter(train_loader))
+    
+    # Ensure we don't try to visualize more samples than are in the batch
+    num_samples = min(num_samples, inputs.shape[0])
+    
+    # Create a grid of sample visualizations
+    fig, axs = plt.subplots(num_samples, 2, figsize=(14, 4 * num_samples))
+    
+    for sample_idx in range(num_samples):
+        # Extract single sample
+        input_sample = inputs[sample_idx].cpu().numpy()  # Shape: [seq_len, input_channels]
+        target_sample = targets[sample_idx].cpu().numpy()  # Shape: [seq_len, output_channels]
+        
+        # Plot input channels
+        if num_samples == 1:
+            ax_input = axs[0]
+            ax_target = axs[1]
+        else:
+            ax_input = axs[sample_idx, 0]
+            ax_target = axs[sample_idx, 1]
+        
+        ax_input.set_title(f'Sample {sample_idx+1} - Input Signal')
+        if input_sample.shape[1] > 10:
+            # If too many channels, just plot first 10
+            channels_to_plot = min(10, input_sample.shape[1])
+            for i in range(channels_to_plot):
+                ax_input.plot(input_sample[:, i], label=f'Ch {i+1}')
+            ax_input.set_xlabel('Time Steps')
+            ax_input.set_ylabel('Amplitude')
+            if sample_idx == 0:  # Only add legend to the first sample to save space
+                ax_input.legend(fontsize='small')
+        else:
+            im = ax_input.imshow(input_sample.T, aspect='auto', interpolation='none')
+            ax_input.set_xlabel('Time Steps')
+            ax_input.set_ylabel('Channel')
+            plt.colorbar(im, ax=ax_input)
+        
+        # Plot target output
+        ax_target.set_title(f'Sample {sample_idx+1} - Target Output')
+        if target_sample.shape[1] > 10:
+            # If too many channels, just plot first 10
+            channels_to_plot = min(10, target_sample.shape[1])
+            for i in range(channels_to_plot):
+                ax_target.plot(target_sample[:, i], label=f'Ch {i+1}')
+            ax_target.set_xlabel('Time Steps')
+            ax_target.set_ylabel('Amplitude')
+            if sample_idx == 0:  # Only add legend to the first sample to save space
+                ax_target.legend(fontsize='small')
+        else:
+            im = ax_target.imshow(target_sample.T, aspect='auto', interpolation='none')
+            ax_target.set_xlabel('Time Steps')
+            ax_target.set_ylabel('Channel')
+            plt.colorbar(im, ax=ax_target)
+    
+    # Add overall title
+    plt.suptitle(f'Training Sample Visualization - Epoch {epoch+1}', fontsize=16)
+    plt.tight_layout(rect=[0, 0, 1, 0.97])
+    
+    # Save the figure
+    viz_path = os.path.join(viz_dir, f'training_samples_epoch_{epoch+1}.png')
+    plt.savefig(viz_path)
+    plt.close()
+    
+    logger.info(f"Training sample visualization saved to {viz_path}")
+    
+    # Log to wandb if enabled
+    if args.use_wandb:
+        # Log the training sample visualization to W&B
+        wandb.log({
+            "training_samples": wandb.Image(viz_path, caption=f"Training Samples - Epoch {epoch+1}"),
+            "current_epoch": epoch + 1
+        })
+        
+        # Create a heatmap grid of all training samples
+        fig, axs = plt.subplots(2, num_samples, figsize=(4 * num_samples, 8))
+        
+        for sample_idx in range(num_samples):
+            # Extract single sample
+            input_sample = inputs[sample_idx].cpu().numpy()
+            target_sample = targets[sample_idx].cpu().numpy()
+            
+            # Input heatmap
+            ax_input = axs[0, sample_idx]
+            im_input = ax_input.imshow(input_sample.T, aspect='auto', interpolation='none', cmap='viridis')
+            ax_input.set_title(f'Input {sample_idx+1}')
+            ax_input.set_xlabel('Time Steps')
+            if sample_idx == 0:  # Only label y-axis on leftmost plots
+                ax_input.set_ylabel('Input Channels')
+            
+            # Target heatmap
+            ax_target = axs[1, sample_idx]
+            im_target = ax_target.imshow(target_sample.T, aspect='auto', interpolation='none', cmap='viridis')
+            ax_target.set_title(f'Target {sample_idx+1}')
+            ax_target.set_xlabel('Time Steps')
+            if sample_idx == 0:  # Only label y-axis on leftmost plots
+                ax_target.set_ylabel('Output Channels')
+        
+        # Add colorbars
+        fig.colorbar(im_input, ax=axs[0, :].ravel().tolist(), shrink=0.6)
+        fig.colorbar(im_target, ax=axs[1, :].ravel().tolist(), shrink=0.6)
+        
+        plt.suptitle(f'Training Samples Heatmap - Epoch {epoch+1}', fontsize=16)
+        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        
+        # Save and log heatmap
+        heatmap_path = os.path.join(viz_dir, f'training_samples_heatmap_epoch_{epoch+1}.png')
+        plt.savefig(heatmap_path)
+        plt.close()
+        
+        wandb.log({
+            "training_samples_heatmap": wandb.Image(heatmap_path, caption=f"Training Samples Heatmap - Epoch {epoch+1}")
+        })
+
 def main():
     # Parse command-line arguments
     args = parse_args()
@@ -641,6 +772,10 @@ def main():
         # Visualize predictions
         if (epoch + 1) % args.viz_every == 0:
             visualize_predictions(model, val_loader, device, epoch, args)
+        
+        # Visualize training samples
+        if (epoch + 1) % args.viz_every == 0:
+            visualize_training_samples(train_loader, num_samples=args.train_viz_samples, epoch=epoch, args=args)
     
     # Plot training history
     plot_training_history(train_losses, val_losses, args)

@@ -494,16 +494,20 @@ def visualize_predictions(model, dataloader, device, epoch, args):
         plt.close(fig_pred)
         plt.close(fig_diff)
 
-def visualize_training_samples(train_loader, num_samples=4, epoch=0, args=None):
+def visualize_training_samples(train_loader, model, device, num_samples=4, epoch=0, args=None):
     """
-    Visualize multiple samples from the training dataset
+    Visualize multiple samples from the training dataset with model predictions
     
     Args:
         train_loader: Data loader containing training data
+        model: The trained model
+        device: The device to use for inference
         num_samples: Number of training samples to visualize
         epoch: Current epoch number (for naming)
         args: Command line arguments
     """
+    model.eval()  # Set model to evaluation mode
+    
     # Create directory for visualization
     viz_dir = os.path.join(args.save_dir, 'visualizations', 'training_samples')
     os.makedirs(viz_dir, exist_ok=True)
@@ -514,21 +518,36 @@ def visualize_training_samples(train_loader, num_samples=4, epoch=0, args=None):
     # Ensure we don't try to visualize more samples than are in the batch
     num_samples = min(num_samples, inputs.shape[0])
     
-    # Create a grid of sample visualizations
-    fig, axs = plt.subplots(num_samples, 2, figsize=(14, 4 * num_samples))
+    # Generate predictions for all samples
+    input_samples = inputs[:num_samples].to(device)
+    target_samples = targets[:num_samples].to(device)
+    
+    with torch.no_grad():
+        predictions = model(input_samples)
+    
+    # Move tensors to CPU for plotting
+    input_samples = input_samples.cpu().numpy()   # Shape: [batch, seq_len, input_channels]
+    target_samples = target_samples.cpu().numpy() # Shape: [batch, seq_len, output_channels]
+    predictions = predictions.cpu().numpy()       # Shape: [batch, seq_len, output_channels]
+    
+    # Create a grid of sample visualizations with input, target, and prediction
+    fig, axs = plt.subplots(num_samples, 3, figsize=(18, 4 * num_samples))
     
     for sample_idx in range(num_samples):
         # Extract single sample
-        input_sample = inputs[sample_idx].cpu().numpy()  # Shape: [seq_len, input_channels]
-        target_sample = targets[sample_idx].cpu().numpy()  # Shape: [seq_len, output_channels]
+        input_sample = input_samples[sample_idx]   # Shape: [seq_len, input_channels]
+        target_sample = target_samples[sample_idx] # Shape: [seq_len, output_channels]
+        prediction = predictions[sample_idx]       # Shape: [seq_len, output_channels]
         
         # Plot input channels
         if num_samples == 1:
             ax_input = axs[0]
             ax_target = axs[1]
+            ax_pred = axs[2]
         else:
             ax_input = axs[sample_idx, 0]
             ax_target = axs[sample_idx, 1]
+            ax_pred = axs[sample_idx, 2]
         
         ax_input.set_title(f'Sample {sample_idx+1} - Input Signal')
         if input_sample.shape[1] > 10:
@@ -562,9 +581,26 @@ def visualize_training_samples(train_loader, num_samples=4, epoch=0, args=None):
             ax_target.set_xlabel('Time Steps')
             ax_target.set_ylabel('Channel')
             plt.colorbar(im, ax=ax_target)
+            
+        # Plot predicted output
+        ax_pred.set_title(f'Sample {sample_idx+1} - Predicted Output')
+        if prediction.shape[1] > 10:
+            # If too many channels, just plot first 10
+            channels_to_plot = min(10, prediction.shape[1])
+            for i in range(channels_to_plot):
+                ax_pred.plot(prediction[:, i], label=f'Ch {i+1}')
+            ax_pred.set_xlabel('Time Steps')
+            ax_pred.set_ylabel('Amplitude')
+            if sample_idx == 0:  # Only add legend to the first sample to save space
+                ax_pred.legend(fontsize='small')
+        else:
+            im = ax_pred.imshow(prediction.T, aspect='auto', interpolation='none')
+            ax_pred.set_xlabel('Time Steps')
+            ax_pred.set_ylabel('Channel')
+            plt.colorbar(im, ax=ax_pred)
     
     # Add overall title
-    plt.suptitle(f'Training Sample Visualization - Epoch {epoch+1}', fontsize=16)
+    plt.suptitle(f'Training Sample Visualization with Predictions - Epoch {epoch+1}', fontsize=16)
     plt.tight_layout(rect=[0, 0, 1, 0.97])
     
     # Save the figure
@@ -582,44 +618,83 @@ def visualize_training_samples(train_loader, num_samples=4, epoch=0, args=None):
             "current_epoch": epoch + 1
         })
         
-        # Create a heatmap grid of all training samples
-        fig, axs = plt.subplots(2, num_samples, figsize=(4 * num_samples, 8))
+        # Create heatmap grids for input, target, prediction, and error
+        fig, axs = plt.subplots(4, num_samples, figsize=(4 * num_samples, 16))
+        
+        # Add row titles
+        row_titles = ['Input', 'Target', 'Prediction', 'Error']
+        
+        for row_idx, title in enumerate(row_titles):
+            # Add a text label for each row
+            fig.text(0.01, 0.75 - row_idx * 0.25, title, va='center', ha='left', 
+                    fontsize=14, rotation=90)
         
         for sample_idx in range(num_samples):
             # Extract single sample
-            input_sample = inputs[sample_idx].cpu().numpy()
-            target_sample = targets[sample_idx].cpu().numpy()
+            input_sample = input_samples[sample_idx]
+            target_sample = target_samples[sample_idx]
+            prediction = predictions[sample_idx]
+            error = target_sample - prediction
             
             # Input heatmap
             ax_input = axs[0, sample_idx]
             im_input = ax_input.imshow(input_sample.T, aspect='auto', interpolation='none', cmap='viridis')
-            ax_input.set_title(f'Input {sample_idx+1}')
-            ax_input.set_xlabel('Time Steps')
+            ax_input.set_title(f'Sample {sample_idx+1}')
+            if row_idx == 3:  # Only add x-label on bottom row
+                ax_input.set_xlabel('Time Steps')
             if sample_idx == 0:  # Only label y-axis on leftmost plots
                 ax_input.set_ylabel('Input Channels')
+            else:
+                ax_input.set_yticks([])
             
             # Target heatmap
             ax_target = axs[1, sample_idx]
             im_target = ax_target.imshow(target_sample.T, aspect='auto', interpolation='none', cmap='viridis')
-            ax_target.set_title(f'Target {sample_idx+1}')
-            ax_target.set_xlabel('Time Steps')
             if sample_idx == 0:  # Only label y-axis on leftmost plots
                 ax_target.set_ylabel('Output Channels')
+            else:
+                ax_target.set_yticks([])
+            
+            # Prediction heatmap
+            ax_pred = axs[2, sample_idx]
+            im_pred = ax_pred.imshow(prediction.T, aspect='auto', interpolation='none', cmap='viridis')
+            if sample_idx == 0:  # Only label y-axis on leftmost plots
+                ax_pred.set_ylabel('Output Channels')
+            else:
+                ax_pred.set_yticks([])
+            
+            # Error heatmap
+            ax_error = axs[3, sample_idx]
+            im_error = ax_error.imshow(error.T, aspect='auto', interpolation='none', cmap='RdBu_r')
+            ax_error.set_xlabel('Time Steps')
+            if sample_idx == 0:  # Only label y-axis on leftmost plots
+                ax_error.set_ylabel('Output Channels')
+            else:
+                ax_error.set_yticks([])
         
         # Add colorbars
-        fig.colorbar(im_input, ax=axs[0, :].ravel().tolist(), shrink=0.6)
-        fig.colorbar(im_target, ax=axs[1, :].ravel().tolist(), shrink=0.6)
+        cbar_ax = fig.add_axes([0.92, 0.75, 0.02, 0.2])  # [left, bottom, width, height]
+        fig.colorbar(im_input, cax=cbar_ax, label='Input Value')
         
-        plt.suptitle(f'Training Samples Heatmap - Epoch {epoch+1}', fontsize=16)
-        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        cbar_ax = fig.add_axes([0.92, 0.5, 0.02, 0.2])
+        fig.colorbar(im_target, cax=cbar_ax, label='Target Value')
+        
+        cbar_ax = fig.add_axes([0.92, 0.25, 0.02, 0.2])
+        fig.colorbar(im_pred, cax=cbar_ax, label='Prediction Value')
+        
+        cbar_ax = fig.add_axes([0.92, 0.05, 0.02, 0.15])
+        fig.colorbar(im_error, cax=cbar_ax, label='Error')
+        
+        plt.suptitle(f'Training Samples Analysis - Epoch {epoch+1}', fontsize=16)
+        plt.subplots_adjust(left=0.05, right=0.9, top=0.95, bottom=0.05, wspace=0.2, hspace=0.3)
         
         # Save and log heatmap
-        heatmap_path = os.path.join(viz_dir, f'training_samples_heatmap_epoch_{epoch+1}.png')
+        heatmap_path = os.path.join(viz_dir, f'training_samples_analysis_epoch_{epoch+1}.png')
         plt.savefig(heatmap_path)
         plt.close()
         
         wandb.log({
-            "training_samples_heatmap": wandb.Image(heatmap_path, caption=f"Training Samples Heatmap - Epoch {epoch+1}")
+            "training_samples_analysis": wandb.Image(heatmap_path, caption=f"Training Samples Analysis - Epoch {epoch+1}")
         })
 
 def main():
@@ -775,7 +850,7 @@ def main():
         
         # Visualize training samples
         if (epoch + 1) % args.viz_every == 0:
-            visualize_training_samples(train_loader, num_samples=args.train_viz_samples, epoch=epoch, args=args)
+            visualize_training_samples(train_loader, model, device, num_samples=args.train_viz_samples, epoch=epoch, args=args)
     
     # Plot training history
     plot_training_history(train_losses, val_losses, args)

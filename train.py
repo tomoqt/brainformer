@@ -146,18 +146,6 @@ def prepare_data(args):
     # Conv1DEncoder expects [batch, seq_len, channels] which it will transpose to [batch, channels, seq_len]
     logger.info("Checking data dimensions...")
     
-    # Apply transposition if requested
-    if args.transpose_data:
-        if train_inputs.dim() == 3:
-            logger.info(f"Transposing train inputs from {train_inputs.shape} to swap seq_len and channels dimensions")
-            train_inputs = train_inputs.transpose(1, 2)
-            val_inputs = val_inputs.transpose(1, 2)
-            
-        if train_outputs.dim() == 3:
-            logger.info(f"Transposing train outputs from {train_outputs.shape} to swap seq_len and channels dimensions")
-            train_outputs = train_outputs.transpose(1, 2)
-            val_outputs = val_outputs.transpose(1, 2)
-    
     logger.info(f"Final train data shapes: inputs {train_inputs.shape}, outputs {train_outputs.shape}")
     logger.info(f"Final validation data shapes: inputs {val_inputs.shape}, outputs {val_outputs.shape}")
     

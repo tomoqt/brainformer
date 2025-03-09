@@ -22,7 +22,7 @@ torchrun \
   --input_channels 70 \
   --output_channels 306 \
   --seq_len 351 \
-  --batch_size 16 \
+  --batch_size 32 \
   --epochs 100 \
   --save_dir checkpoints \
   --save_every 10 \

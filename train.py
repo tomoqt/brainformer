@@ -551,7 +551,7 @@ def main():
         )
     
     # Loss function and optimizer
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     
     # Configure optimizer using the model's method
     optimizer = model.configure_optimizers(

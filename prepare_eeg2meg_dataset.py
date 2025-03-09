@@ -165,9 +165,9 @@ def save_dataset(
     # Plot input channels (EEG)
     plt.subplot(3, 1, 1)
     plt.title("Input Signal (EEG)", fontsize=14)
-    num_input_channels_to_plot = min(10, inputs.shape[1])
+    num_input_channels_to_plot = min(10, inputs.shape[2])
     for c in range(num_input_channels_to_plot):
-        plt.plot(inputs[sample_idx, c].numpy(), label=f"Ch {c+1}")
+        plt.plot(inputs[sample_idx, :, c].numpy(), label=f"Ch {c+1}")
     plt.xlabel("Time Steps")
     plt.ylabel("Amplitude")
     plt.legend(loc='upper right', ncol=2)
@@ -175,10 +175,10 @@ def save_dataset(
     
     # Plot output channels (MEG)
     plt.subplot(3, 1, 2)
-    plt.title("Target Output (MEG)", fontsize=14)
-    num_output_channels_to_plot = min(10, outputs.shape[1])
+    plt.title("Output Signal (MEG)", fontsize=14)
+    num_output_channels_to_plot = min(10, outputs.shape[2])
     for c in range(num_output_channels_to_plot):
-        plt.plot(outputs[sample_idx, c].numpy(), label=f"Ch {c+1}")
+        plt.plot(outputs[sample_idx, :, c].numpy(), label=f"Ch {c+1}")
     plt.xlabel("Time Steps")
     plt.ylabel("Amplitude")
     plt.legend(loc='upper right', ncol=2)
@@ -187,7 +187,7 @@ def save_dataset(
     # Add a spectrogram of the EEG input (first channel) to check frequency content
     plt.subplot(3, 1, 3)
     plt.title("EEG Channel 1 Spectrogram", fontsize=14)
-    f, t, Sxx = signal.spectrogram(inputs[sample_idx, 0].numpy(), fs=100)  # Assuming 100Hz sampling rate
+    f, t, Sxx = signal.spectrogram(inputs[sample_idx, :, 0].numpy(), fs=100)
     plt.pcolormesh(t, f, 10 * np.log10(Sxx), shading='gouraud')
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [sec]')
@@ -203,7 +203,7 @@ def save_dataset(
     plt.subplot(2, 1, 1)
     plt.title("EEG Power Spectral Density", fontsize=14)
     for c in range(num_input_channels_to_plot):
-        f, Pxx = signal.welch(inputs[sample_idx, c].numpy(), fs=100, nperseg=256)
+        f, Pxx = signal.welch(inputs[sample_idx, :, c].numpy(), fs=100, nperseg=256)
         plt.semilogy(f, Pxx, label=f"Ch {c+1}")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("Power/Frequency [V^2/Hz]")
@@ -214,7 +214,7 @@ def save_dataset(
     plt.subplot(2, 1, 2)
     plt.title("MEG Power Spectral Density", fontsize=14)
     for c in range(num_output_channels_to_plot):
-        f, Pxx = signal.welch(outputs[sample_idx, c].numpy(), fs=100, nperseg=256)
+        f, Pxx = signal.welch(outputs[sample_idx, :, c].numpy(), fs=100, nperseg=256)
         plt.semilogy(f, Pxx, label=f"Ch {c+1}")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("Power/Frequency [V^2/Hz]")

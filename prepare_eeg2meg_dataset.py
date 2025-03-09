@@ -237,7 +237,7 @@ def main():
     parser = argparse.ArgumentParser(description="Prepare EEG2MEG dataset from Hugging Face")
     parser.add_argument("--save_dir", type=str, default="./eeg2meg", help="Directory to save dataset")
     parser.add_argument("--prefix", type=str, default="eeg2meg", help="Prefix for saved files")
-    parser.add_argument("--seq_len", type=int, default=771, help="Expected sequence length")
+    parser.add_argument("--seq_len", type=int, default=351, help="Expected sequence length")
     parser.add_argument("--split", type=str, default="train", help="Dataset split to use")
     parser.add_argument("--cache_dir", type=str, default=None, help="Directory to cache the dataset")
     

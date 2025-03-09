@@ -36,14 +36,15 @@ def process_dataset(
     expected_seq_len: int = 771
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
-    Process the EEG2MEG dataset assuming data is a 2D array with rows as channels.
+    Process the EEG2MEG dataset and transpose data to sequence-first format.
     
     Args:
         dataset: The loaded dataset
         expected_seq_len: Expected sequence length
         
     Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Input (EEG) and output (MEG) tensors
+        Tuple[torch.Tensor, torch.Tensor]: Input (EEG) and output (MEG) tensors 
+                                          in shape [batch, sequence_length, channels]
     """
     num_samples = len(dataset)
     
@@ -116,12 +117,16 @@ def process_dataset(
                     eeg_filtered[ch] = eeg_filtered[ch] * scale_factor
             eeg_tensor = eeg_filtered
         
+        # Transpose both tensors from [channels, sequence_length] to [sequence_length, channels]
+        eeg_tensor = eeg_tensor.transpose(0, 1)  # Now [sequence_length, channels]
+        meg_tensor = meg_tensor.transpose(0, 1)  # Now [sequence_length, channels]
+        
         inputs.append(eeg_tensor)
         outputs.append(meg_tensor)
     
     # Stack all samples into batch dimension
-    inputs_tensor = torch.stack(inputs)  # [batch, channels, sequence]
-    outputs_tensor = torch.stack(outputs)  # [batch, channels, sequence]
+    inputs_tensor = torch.stack(inputs)  # [batch, sequence, channels]
+    outputs_tensor = torch.stack(outputs)  # [batch, sequence, channels]
     
     print(f"Processed data shapes: Inputs {inputs_tensor.shape}, Outputs {outputs_tensor.shape}")
     return inputs_tensor, outputs_tensor

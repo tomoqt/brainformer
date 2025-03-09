@@ -27,6 +27,7 @@ class BrainFormer(nn.Module):
         n_embd=768,
         transformer_dropout=0.0,
         bias=True,
+        bidirectional=False,
         
         # Decoder params
         decoder_hidden_dims=[256, 128, 64, 32],
@@ -55,7 +56,8 @@ class BrainFormer(nn.Module):
             n_head=n_head,
             n_embd=n_embd,
             dropout=transformer_dropout,
-            bias=bias
+            bias=bias,
+            bidirectional=bidirectional
         )
         self.transformer = SimplifiedDecoder(decoder_config)
         

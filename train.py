@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument('--n_head', type=int, default=4, help='Number of attention heads')
     parser.add_argument('--n_embd', type=int, default=512, help='Embedding dimension')
     parser.add_argument('--dropout', type=float, default=0.01, help='Dropout rate')
+    parser.add_argument('--bidirectional', action='store_true', default=False, help='Use bidirectional attention instead of causal attention')
     
     # Training parameters
     parser.add_argument('--batch_size', type=int, default=64, help='Batch size for training')
@@ -188,6 +189,7 @@ def create_model(args):
         n_embd=args.n_embd,
         transformer_dropout=args.dropout,
         bias=True,
+        bidirectional=args.bidirectional,
         
         decoder_hidden_dims=decoder_hidden_dims,
         decoder_kernel_sizes=[3, 3, 3, 3],
@@ -471,8 +473,9 @@ def main():
     model = create_model(args)
     model = model.to(device)
     
-    # Print model summary
-    logger.info(f"BrainFormer model created with {sum(p.numel() for p in model.parameters()):,} parameters")
+    # Log model configuration
+    logger.info(f"Model created with {sum(p.numel() for p in model.parameters()):,} parameters")
+    logger.info(f"Using {'bidirectional' if args.bidirectional else 'causal (unidirectional)'} attention")
     
     # Set up wandb to watch model gradients if wandb is enabled
     if args.use_wandb:

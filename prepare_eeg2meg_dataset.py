@@ -203,7 +203,7 @@ def save_dataset(
     plt.subplot(2, 1, 1)
     plt.title("EEG Power Spectral Density", fontsize=14)
     for c in range(num_input_channels_to_plot):
-        f, Pxx = signal.welch(inputs[sample_idx, :, c].numpy(), fs=100, nperseg=256)
+        f, Pxx = signal.welch(inputs[sample_idx, c].numpy(), fs=100, nperseg=256)
         plt.semilogy(f, Pxx, label=f"Ch {c+1}")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("Power/Frequency [V^2/Hz]")
@@ -214,7 +214,7 @@ def save_dataset(
     plt.subplot(2, 1, 2)
     plt.title("MEG Power Spectral Density", fontsize=14)
     for c in range(num_output_channels_to_plot):
-        f, Pxx = signal.welch(outputs[sample_idx, :, c].numpy(), fs=100, nperseg=256)
+        f, Pxx = signal.welch(outputs[sample_idx, c].numpy(), fs=100, nperseg=256)
         plt.semilogy(f, Pxx, label=f"Ch {c+1}")
     plt.xlabel("Frequency [Hz]")
     plt.ylabel("Power/Frequency [V^2/Hz]")

@@ -69,6 +69,7 @@ class CausalSelfAttention(nn.Module):
         self.n_head = config.n_head
         self.n_embd = config.n_embd
         self.dropout = config.dropout
+        self.bidirectional = config.bidirectional
         
         # Initialize rotary embeddings
         self.head_dim = config.n_embd // config.n_head
@@ -106,14 +107,21 @@ class CausalSelfAttention(nn.Module):
         q = torch.cat((q_rot, q_pass), dim=-1)
         k = torch.cat((k_rot, k_pass), dim=-1)
 
-        # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
+        # self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         if self.flash:
             # efficient attention using Flash Attention CUDA kernels
-            y = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=None, dropout_p=self.dropout if self.training else 0, is_causal=True)
+            y = torch.nn.functional.scaled_dot_product_attention(
+                q, k, v, 
+                attn_mask=None, 
+                dropout_p=self.dropout if self.training else 0, 
+                is_causal=not self.bidirectional  # Only use causal mask if not bidirectional
+            )
         else:
             # manual implementation of attention
             att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-            att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
+            if not self.bidirectional:
+                # Apply causal mask only if not bidirectional
+                att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
             att = F.softmax(att, dim=-1)
             att = self.attn_dropout(att)
             y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
@@ -161,6 +169,7 @@ class DecoderConfig:
     n_embd: int = 768
     dropout: float = 0.0
     bias: bool = True
+    bidirectional: bool = False  # Default to False for backward compatibility
 
 class SimplifiedDecoder(nn.Module):
     """
@@ -169,6 +178,7 @@ class SimplifiedDecoder(nn.Module):
     - Does not have embedding tables
     - Does not have a language model head
     - Returns hidden state representations
+    - Supports both causal (unidirectional) and bidirectional attention
     """
 
     def __init__(self, config):
@@ -190,6 +200,7 @@ class SimplifiedDecoder(nn.Module):
 
         # report number of parameters
         print("number of parameters: %.2fM" % (self.get_num_params()/1e6,))
+        print(f"attention mode: {'bidirectional' if config.bidirectional else 'causal'}")
 
     def get_num_params(self):
         """

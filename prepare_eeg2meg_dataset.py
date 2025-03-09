@@ -77,15 +77,6 @@ def process_dataset(
         if meg_tensor.ndim == 1:
             meg_tensor = meg_tensor.unsqueeze(0)
         
-        # Normalize EEG data to reduce the sigmoid effect 
-        # Apply channel-wise z-score normalization
-        for ch in range(eeg_tensor.shape[0]):
-            channel = eeg_tensor[ch]
-            mean = channel.mean()
-            std = channel.std()
-            if std > 0:  # Avoid division by zero
-                eeg_tensor[ch] = (channel - mean) / std
-        
         # Ensure the sequence length is correct
         if eeg_tensor.shape[1] != expected_seq_len:
             if eeg_tensor.shape[1] < expected_seq_len:
@@ -104,18 +95,6 @@ def process_dataset(
             else:
                 # Truncate to expected length
                 meg_tensor = meg_tensor[:, :expected_seq_len]
-        
-        # Apply high-pass filtering to EEG to remove slow drifts (common cause of sigmoid-like patterns)
-        # Simple first-order difference as a basic high-pass filter
-        if eeg_tensor.shape[1] > 1:  # Only if we have more than one time point
-            eeg_filtered = torch.zeros_like(eeg_tensor)
-            eeg_filtered[:, 1:] = eeg_tensor[:, 1:] - eeg_tensor[:, :-1]
-            # Rescale the filtered signal to have a similar range as the original
-            for ch in range(eeg_filtered.shape[0]):
-                if eeg_filtered[ch].std() > 0:
-                    scale_factor = eeg_tensor[ch].std() / eeg_filtered[ch].std()
-                    eeg_filtered[ch] = eeg_filtered[ch] * scale_factor
-            eeg_tensor = eeg_filtered
         
         # Transpose both tensors from [channels, sequence_length] to [sequence_length, channels]
         eeg_tensor = eeg_tensor.transpose(0, 1)  # Now [sequence_length, channels]

@@ -10,6 +10,8 @@ from tqdm import tqdm
 import logging
 from datetime import datetime
 import wandb
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import LinearLR, SequentialLR
 
 from models.brainformer import BrainFormer
 
@@ -193,8 +195,8 @@ def create_model(args):
     
     return model
 
-def train_epoch(model, dataloader, criterion, optimizer, device, args, epoch):
-    """Train the model for one epoch"""
+def train_epoch(model, dataloader, criterion, optimizer, device, args, epoch, scheduler=None):
+    """Train for one epoch"""
     model.train()
     epoch_loss = 0
     num_batches = len(dataloader)
@@ -239,6 +241,12 @@ def train_epoch(model, dataloader, criterion, optimizer, device, args, epoch):
                 'batch': batch_idx + epoch * num_batches,
                 'epoch': epoch
             })
+    
+    # Step the scheduler if provided
+    if scheduler is not None:
+        scheduler.step()
+        if args.use_wandb:
+            wandb.log({'learning_rate': optimizer.param_groups[0]['lr'] if not isinstance(optimizer, list) else optimizer[1].param_groups[0]['lr']})
     
     return epoch_loss / num_batches
 
@@ -525,7 +533,7 @@ def main():
         )
     
     # Loss function and optimizer
-    criterion = nn.L1Loss()
+    criterion = nn.MSELoss()
     
     # Configure optimizer using the model's method
     optimizer = model.configure_optimizers(
@@ -541,6 +549,36 @@ def main():
         world_size=world_size
     )
     
+    # Setup learning rate scheduler with cosine annealing and linear warmup
+    if isinstance(optimizer, list):
+        # For Muon + AdamW case, we only apply scheduler to AdamW
+        opt_for_scheduler = optimizer[1]
+    else:
+        opt_for_scheduler = optimizer
+        
+    # Linear warmup for 1 epoch
+    warmup_scheduler = LinearLR(
+        opt_for_scheduler, 
+        start_factor=0.1, 
+        end_factor=1.0, 
+        total_iters=len(train_loader)
+    )
+    
+    # Cosine annealing for remaining epochs
+    cosine_scheduler = CosineAnnealingLR(
+        opt_for_scheduler,
+        T_max=(args.epochs - 1) * len(train_loader)
+    )
+    
+    # Combine schedulers: linear warmup followed by cosine annealing
+    scheduler = SequentialLR(
+        opt_for_scheduler, 
+        schedulers=[warmup_scheduler, cosine_scheduler],
+        milestones=[len(train_loader)]  # Switch after 1 epoch
+    )
+    
+    logger.info("Using cosine LR schedule with 1 epoch linear warmup")
+    
     # Training loop
     train_losses = []
     val_losses = []
@@ -550,7 +588,7 @@ def main():
     
     for epoch in range(args.epochs):
         # Train for one epoch
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, args, epoch)
+        train_loss = train_epoch(model, train_loader, criterion, optimizer, device, args, epoch, scheduler)
         train_losses.append(train_loss)
         
         # Validate

@@ -24,7 +24,7 @@ def load_eeg2megset(
     """
     print(f"Loading EEG2MEG dataset (split: {split})...")
     dataset = load_dataset(
-        "fracapuano/eeg2meg-medium-tokenized", 
+        "fracapuano/eeg2meg-medium", 
         split=split,
         cache_dir=cache_dir
     )

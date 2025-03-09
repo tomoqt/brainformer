@@ -21,7 +21,7 @@ torchrun \
   --data_dir eeg2meg_data \
   --input_channels 70 \
   --output_channels 306 \
-  --seq_len 771 \
+  --seq_len 351 \
   --batch_size 1 \
   --epochs 100 \
   --save_dir checkpoints \

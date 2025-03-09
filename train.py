@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation data ratio when splitting raw data')
     parser.add_argument('--input_file', type=str, default='inputs.pt', help='Filename of input data (default: inputs.pt)')
     parser.add_argument('--output_file', type=str, default='outputs.pt', help='Filename of output data (default: outputs.pt)')
-    parser.add_argument('--transpose_data', action='store_true', default=True, help='Transpose dimensions 1 and 2 of the input data (seq_len and channels)')
+    parser.add_argument('--transpose_data', action='store_true', default=False, help='Transpose dimensions 1 and 2 of the input data (seq_len and channels)')
     
     # Model parameters
     parser.add_argument('--encoder_hidden_dims', type=str, default='256,256', help='Comma-separated list of encoder hidden dimensions')

@@ -43,5 +43,5 @@ torchrun \
   --decoder_hidden_dims "1024" \
   --dropout 0.0 \
   --lr 0.0001 \
-  --weight_decay 0.1 
+  --weight_decay 0.6 
 echo "Large-scale EEG2MEG training with Muon optimizer completed successfully!" 

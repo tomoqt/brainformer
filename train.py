@@ -29,6 +29,7 @@ def parse_args():
     parser.add_argument('--val_ratio', type=float, default=0.2, help='Validation data ratio when splitting raw data')
     parser.add_argument('--input_file', type=str, default='inputs.pt', help='Filename of input data (default: inputs.pt)')
     parser.add_argument('--output_file', type=str, default='outputs.pt', help='Filename of output data (default: outputs.pt)')
+    parser.add_argument('--transpose_data', action='store_true', default=True, help='Transpose dimensions 1 and 2 of the input data (seq_len and channels)')
     
     # Model parameters
     parser.add_argument('--encoder_hidden_dims', type=str, default='256,256', help='Comma-separated list of encoder hidden dimensions')
@@ -145,17 +146,15 @@ def prepare_data(args):
     # Conv1DEncoder expects [batch, seq_len, channels] which it will transpose to [batch, channels, seq_len]
     logger.info("Checking data dimensions...")
     
-    # Ensure input data has shape [N, seq_len, input_channels]
-    if train_inputs.dim() == 3:
-        if train_inputs.shape[2] != args.input_channels and train_inputs.shape[1] == args.input_channels:
-            logger.info(f"Transposing train inputs from {train_inputs.shape} to ensure seq_len is dim 1 and channels is dim 2")
+    # Apply transposition if requested
+    if args.transpose_data:
+        if train_inputs.dim() == 3:
+            logger.info(f"Transposing train inputs from {train_inputs.shape} to swap seq_len and channels dimensions")
             train_inputs = train_inputs.transpose(1, 2)
             val_inputs = val_inputs.transpose(1, 2)
-    
-    # Ensure output data has shape [N, seq_len, output_channels]
-    if train_outputs.dim() == 3:
-        if train_outputs.shape[2] != args.output_channels and train_outputs.shape[1] == args.output_channels:
-            logger.info(f"Transposing train outputs from {train_outputs.shape} to ensure seq_len is dim 1 and channels is dim 2")
+            
+        if train_outputs.dim() == 3:
+            logger.info(f"Transposing train outputs from {train_outputs.shape} to swap seq_len and channels dimensions")
             train_outputs = train_outputs.transpose(1, 2)
             val_outputs = val_outputs.transpose(1, 2)
     

@@ -72,7 +72,7 @@ class BrainFormer(nn.Module):
         
     def forward(self, x):
         """
-        Forward pass through the entire model chain
+        Forward pass of the BrainFormer model.
         
         Args:
             x: Input tensor of shape [batch_size, sequence_length, input_channels]
@@ -93,6 +93,9 @@ class BrainFormer(nn.Module):
         # Step 3: Pass through the decoder
         # The transformer outputs in the format [batch_size, seq_len, n_embd]
         decoded = self.decoder(transformed)  # Shape: [batch_size, seq_len, output_channels]
+        
+        # Apply tanh activation to the last dimension (channels)
+        decoded = torch.tanh(decoded)
         
         return decoded
 

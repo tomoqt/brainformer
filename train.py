@@ -435,51 +435,54 @@ def visualize_predictions(model, dataloader, device, epoch, args):
     
     # Log to wandb if enabled
     if args.use_wandb:
-        # Log regular visualization
-        wandb_log_dict = {f"visualization_epoch_{epoch+1}": wandb.Image(viz_path)}
+        # Use fixed keys for W&B logging to overwrite previous images
+        wandb_log_dict = {
+            "visualization": wandb.Image(viz_path, caption=f"Epoch {epoch+1}"),
+            "current_epoch": epoch + 1,  # Log the current epoch for reference
+        }
         
         # Create heatmap for input data
         fig_input, ax_input = plt.subplots(figsize=(12, 8))
         im_input = ax_input.imshow(input_sample.T, aspect='auto', interpolation='none', cmap='viridis')
-        ax_input.set_title('Input Data Heatmap')
+        ax_input.set_title(f'Input Data Heatmap - Epoch {epoch+1}')
         ax_input.set_xlabel('Time Steps')
         ax_input.set_ylabel('Input Channels')
         plt.colorbar(im_input, ax=ax_input)
         plt.tight_layout()
-        wandb_log_dict[f"heatmap_input_epoch_{epoch+1}"] = wandb.Image(fig_input)
+        wandb_log_dict["heatmap_input"] = wandb.Image(fig_input, caption=f"Epoch {epoch+1}")
         
         # Create heatmap for target data
         fig_target, ax_target = plt.subplots(figsize=(12, 8))
         im_target = ax_target.imshow(target_sample.T, aspect='auto', interpolation='none', cmap='viridis')
-        ax_target.set_title('Target Data Heatmap')
+        ax_target.set_title(f'Target Data Heatmap - Epoch {epoch+1}')
         ax_target.set_xlabel('Time Steps')
         ax_target.set_ylabel('Output Channels')
         plt.colorbar(im_target, ax=ax_target)
         plt.tight_layout()
-        wandb_log_dict[f"heatmap_target_epoch_{epoch+1}"] = wandb.Image(fig_target)
+        wandb_log_dict["heatmap_target"] = wandb.Image(fig_target, caption=f"Epoch {epoch+1}")
         
         # Create heatmap for prediction data
         fig_pred, ax_pred = plt.subplots(figsize=(12, 8))
         im_pred = ax_pred.imshow(prediction.T, aspect='auto', interpolation='none', cmap='viridis')
-        ax_pred.set_title('Prediction Data Heatmap')
+        ax_pred.set_title(f'Prediction Data Heatmap - Epoch {epoch+1}')
         ax_pred.set_xlabel('Time Steps')
         ax_pred.set_ylabel('Output Channels')
         plt.colorbar(im_pred, ax=ax_pred)
         plt.tight_layout()
-        wandb_log_dict[f"heatmap_prediction_epoch_{epoch+1}"] = wandb.Image(fig_pred)
+        wandb_log_dict["heatmap_prediction"] = wandb.Image(fig_pred, caption=f"Epoch {epoch+1}")
         
         # Create heatmap for prediction vs target difference
         fig_diff, ax_diff = plt.subplots(figsize=(12, 8))
         diff_data = target_sample - prediction
         im_diff = ax_diff.imshow(diff_data.T, aspect='auto', interpolation='none', cmap='RdBu_r')
-        ax_diff.set_title('Prediction Error Heatmap (Target - Prediction)')
+        ax_diff.set_title(f'Prediction Error Heatmap - Epoch {epoch+1}')
         ax_diff.set_xlabel('Time Steps')
         ax_diff.set_ylabel('Output Channels')
         plt.colorbar(im_diff, ax=ax_diff)
         plt.tight_layout()
-        wandb_log_dict[f"heatmap_error_epoch_{epoch+1}"] = wandb.Image(fig_diff)
+        wandb_log_dict["heatmap_error"] = wandb.Image(fig_diff, caption=f"Epoch {epoch+1}")
         
-        # Log all images to wandb
+        # Log all images to wandb with fixed keys (will overwrite previous images)
         wandb.log(wandb_log_dict)
         
         # Close all figures

@@ -148,6 +148,24 @@ def prepare_data(args):
     # Conv1DEncoder expects [batch, seq_len, channels] which it will transpose to [batch, channels, seq_len]
     logger.info("Checking data dimensions...")
     
+    # Ensure data has the correct sequence length by truncating if necessary
+    # Expected shape: [batch, seq_len, channels]
+    if train_inputs.shape[1] > args.seq_len:
+        logger.info(f"Truncating train inputs from sequence length {train_inputs.shape[1]} to {args.seq_len}")
+        train_inputs = train_inputs[:, :args.seq_len, :]
+    
+    if train_outputs.shape[1] > args.seq_len:
+        logger.info(f"Truncating train outputs from sequence length {train_outputs.shape[1]} to {args.seq_len}")
+        train_outputs = train_outputs[:, :args.seq_len, :]
+    
+    if val_inputs.shape[1] > args.seq_len:
+        logger.info(f"Truncating validation inputs from sequence length {val_inputs.shape[1]} to {args.seq_len}")
+        val_inputs = val_inputs[:, :args.seq_len, :]
+    
+    if val_outputs.shape[1] > args.seq_len:
+        logger.info(f"Truncating validation outputs from sequence length {val_outputs.shape[1]} to {args.seq_len}")
+        val_outputs = val_outputs[:, :args.seq_len, :]
+    
     logger.info(f"Final train data shapes: inputs {train_inputs.shape}, outputs {train_outputs.shape}")
     logger.info(f"Final validation data shapes: inputs {val_inputs.shape}, outputs {val_outputs.shape}")
     

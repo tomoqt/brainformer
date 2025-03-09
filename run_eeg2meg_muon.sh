@@ -22,7 +22,7 @@ torchrun \
   --input_channels 70 \
   --output_channels 306 \
   --seq_len 351 \
-  --batch_size 1 \
+  --batch_size 16 \
   --epochs 100 \
   --save_dir checkpoints \
   --save_every 10 \
@@ -39,9 +39,9 @@ torchrun \
   --n_layer 12 \
   --n_head 8 \
   --n_embd 1024 \
-  --encoder_hidden_dims "512,512,512,512" \
-  --decoder_hidden_dims "512,512,512,512" \
+  --encoder_hidden_dims "1024" \
+  --decoder_hidden_dims "1024" \
   --dropout 0.0 \
   --lr 0.0001 \
-  --weight_decay 0.6 
+  --weight_decay 0.1 
 echo "Large-scale EEG2MEG training with Muon optimizer completed successfully!" 

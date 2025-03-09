@@ -55,8 +55,8 @@ def process_dataset(
     # Process each sample
     for i in tqdm(range(num_samples), desc="Processing dataset", ncols=100):
         # Get EEG data (input) and MEG data (output)
-        eeg = dataset[i]['eeg_data']
-        meg = dataset[i]['meg_data']
+        eeg = dataset[i]['eeg']
+        meg = dataset[i]['meg']
         
         # Convert to float tensors
         eeg_tensor = torch.tensor(eeg, dtype=torch.float32)
